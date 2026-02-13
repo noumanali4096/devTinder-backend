@@ -44,26 +44,69 @@ app.use(express.json());
 //     res.send("Root Route");
 // })
 
-app.post("/signup", async(req, res) => {
+app.post("/signup", async (req, res) => {
 
-    console.log(req.body);
-    const user = new User(req.body);
+  console.log(req.body);
+  const user = new User(req.body);
 
-    try{
-        await user.save();
+  try {
+    await user.save();
     res.send("User Added Successfully");
-    } catch(err) {
-        res.status(400).send("Error saving the user." + err.message)
+  } catch (err) {
+    res.status(400).send("Error saving the user." + err.message)
+  }
+
+});
+
+app.get("/user", async (req, res) => {
+  const email = req.body.email;
+  try {
+    const users = await User.find({ emailID: email });
+    if (users.length > 0) {
+      res.send(users);
+    } else {
+      res.status(404).send("User not found");
     }
-    
+  } catch (err) {
+    res.status(500).send("something went wrong..");
+  }
+
+});
+
+app.get("/feed", async (req, res) => {
+  try{
+    const users = await User.find({});
+    if(users.length > 0){
+      res.send(users);
+    } else {
+      res.send("Users collection is empty");
+    }
+  } catch (err) {
+    res.status(500).send("something went wrong..");
+  }
+})
+
+app.patch("/user", async (req, res) => {
+  const userId = req.body.userId;
+  const data = req.body;
+  try{
+    const user = await User.findOneAndUpdate({_id: userId}, data)
+    if(user){
+      res.send("updated successfully");
+    } else {
+      res.send("not updated")
+    }
+  } catch (err) {
+    res.status(500).send("something went wrong..");
+  }
 });
 
 connectDB().then(() => {
-    console.log("Database Connection established..");
-    app.listen(3000, ()=>{
+  console.log("Database Connection established..");
+  app.listen(3000, () => {
     console.log("server is listening on port 3000....");
-});
+  });
 }).catch((err) => {
-    console.error("Something not right with the DB connection")
+  console.error("Something not right with the DB connection")
 })
 
