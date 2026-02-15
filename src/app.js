@@ -1,9 +1,17 @@
 const express = require("express");
 const connectDB = require("./config/database")
 const User = require("./models/user")
+const { validateSignupData } = require("./middlewares/validator")
+
+const bcrypt = require("bcrypt")
+const jwt = require("jsonwebtoken")
+
+const {userAuth} = require("./middlewares/auth");
+const cookieParser = require("cookie-parser")
 const app = express();
 
 app.use(express.json());
+app.use(cookieParser());
 // app.use("/profile", (req,res)=>{
 //     res.send("Test test test");
 // })
@@ -46,16 +54,50 @@ app.use(express.json());
 
 app.post("/signup", async (req, res) => {
 
-  console.log(req.body);
-  const user = new User(req.body);
-
   try {
+    console.log(req.body)
+    validateSignupData(req)
+    const { firstName, lastName, emailID, password } = req.body;
+    const passwordHash = await bcrypt.hash(password, 10)
+    const user = new User({
+      firstName, lastName, emailID, password: passwordHash,
+    });
     await user.save();
     res.send("User Added Successfully");
   } catch (err) {
-    res.status(400).send("Error saving the user." + err.message)
+    res.status(400).send("Error : " + err.message)
   }
 
+});
+
+app.post("/login", async (req, res) => {
+
+  try {
+    const { emailID, password } = req.body;
+    const user = await User.findOne({ emailID: emailID });
+    if (!user) {
+      throw new Error("User is not present");
+    }
+    const isValidPassword = await bcrypt.compare(password, user.password);
+    if (!isValidPassword) {
+      throw new Error("Invalid credentials..");
+    } else {
+      const token = await jwt.sign({ userId: user._id }, "DevTest@555");
+      console.log("Token: ", token);
+      res.cookie("token", token);
+      res.send("User Logged In..")
+    }
+  } catch (err) {
+    res.status(500).send("ERROR : " + err.message);
+  }
+})
+
+app.get("/me", userAuth, async (req, res) => {
+  try {
+      res.send(req.user);
+  } catch (err) {
+    res.status(500).send("ERROR : " + err.message);
+  }
 });
 
 app.get("/user", async (req, res) => {
@@ -74,9 +116,9 @@ app.get("/user", async (req, res) => {
 });
 
 app.get("/feed", async (req, res) => {
-  try{
+  try {
     const users = await User.find({});
-    if(users.length > 0){
+    if (users.length > 0) {
       res.send(users);
     } else {
       res.send("Users collection is empty");
@@ -86,18 +128,27 @@ app.get("/feed", async (req, res) => {
   }
 })
 
-app.patch("/user", async (req, res) => {
-  const userId = req.body.userId;
+app.patch("/user/:userId", async (req, res) => {
+  const userId = req.params?.userId;
   const data = req.body;
-  try{
-    const user = await User.findOneAndUpdate({_id: userId}, data)
-    if(user){
-      res.send("updated successfully");
+
+  try {
+    const ALLOWED_UPDATES = ["skills", "gender", "profile_image", "age", "phoneNumber",];
+    const isUpdateAllowed = Object.keys(data).every((k) => ALLOWED_UPDATES.includes(k));
+    if (!isUpdateAllowed) {
+      throw new Error("Update not allowed")
+    }
+    const user = await User.findOneAndUpdate({ _id: userId }, data, { runValidators: true, returnDocument: "after" })
+    if (user) {
+      res.send({
+        message: "User Updated successfully",
+        data: user,
+      });
     } else {
       res.send("not updated")
     }
   } catch (err) {
-    res.status(500).send("something went wrong..");
+    res.status(500).send("UPDATE FAILED.." + err.message);
   }
 });
 
